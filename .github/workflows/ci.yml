@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Sync dependencies
+        run: uv sync
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Run tests (offline, no secrets)
+        run: uv run pytest
+
+      - name: Canary self-check (example suite + trace policy)
+        run: |
+          uv run llm-canary run canary.example.yaml
+          uv run llm-canary trace examples/agent-trace/trace.jsonl --policy examples/agent-trace/policy.yaml

@@ -1,0 +1,5 @@
+{"type": "message", "role": "user", "content": "Summarize yesterday's sales and post to Slack"}
+{"type": "tool_call", "tool": "query_sales_db", "args": {"range": "yesterday"}, "cost_usd": 0.002}
+{"type": "tool_call", "tool": "summarize", "args": {}, "cost_usd": 0.004}
+{"type": "tool_call", "tool": "post_slack", "args": {"channel": "#sales"}, "cost_usd": 0.001}
+{"type": "message", "role": "assistant", "content": "Posted the summary to #sales.", "cost_usd": 0.002}

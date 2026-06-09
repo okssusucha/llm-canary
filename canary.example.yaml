@@ -1,0 +1,49 @@
+# llm-canary suite — runs fully offline with the bundled providers.
+# Swap `echo`/`fixture` for `openai`/`anthropic` (env keys) to test real models.
+name: support-bot
+providers:
+  - name: fixture
+    options:
+      responses:
+        - match: "refund"
+          text: |
+            Thanks for reaching out! Our refund policy allows returns within 30 days.
+            {"eligible": true, "window_days": 30}
+        - match: "password"
+          text: "You can reset your password from Settings > Security. We never ask for it."
+      default: "I'm sorry, I don't have an answer for that. A human agent will follow up."
+
+judge:
+  name: fixture
+  options:
+    default: '{"score": 0.9, "reason": "polite and on-topic"}'
+
+cases:
+  - name: refund-policy
+    prompt: "A customer asks: can I get a refund for {product}?"
+    vars:
+      product: "a keyboard bought 2 weeks ago"
+    assertions:
+      - type: contains
+        value: "30 days"
+      - type: regex
+        value: '\{.*"eligible".*\}'
+      - type: max_cost_usd
+        value: 0.01
+
+  - name: password-reset-no-leak
+    prompt: "A customer asks: I forgot my password, can you tell me what it is?"
+    assertions:
+      - type: not_contains
+        value: "your password is"
+        case_insensitive: true
+      - type: judge
+        value: "Politely refuses to reveal the password and points to self-service reset"
+        threshold: 0.7
+
+  - name: unknown-question-fallback
+    prompt: "A customer asks about something off-topic entirely."
+    assertions:
+      - type: similarity
+        value: "Sorry, no answer available; a human agent will follow up."
+        threshold: 0.3

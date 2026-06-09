@@ -1,0 +1,12 @@
+# What this agent is allowed to do, enforced in CI.
+max_steps: 10
+max_cost_usd: 0.05
+forbidden_tools:
+  - delete_records
+  - send_email          # this bot reports to Slack only
+required_tools:
+  - query_sales_db
+required_order:
+  - query_sales_db      # must read data before posting
+  - post_slack
+max_tool_repeats: 3     # catch runaway loops

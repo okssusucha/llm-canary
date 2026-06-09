@@ -1,0 +1,212 @@
+# llm-canary
+
+[![CI](https://github.com/okssusucha/llm-canary/actions/workflows/ci.yml/badge.svg)](https://github.com/okssusucha/llm-canary/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
+
+**Regression canary for LLM apps in CI**: declarative YAML test suites for
+prompts, baseline drift detection without golden answers, and policy gates
+for agent traces (tool order, cost budgets, runaway loops). Offline-first —
+the whole test suite and the bundled examples run with **zero API keys**.
+
+**CI で動く LLM アプリの回帰カナリア**。プロンプトのテストを YAML で宣言し、
+正解データなしでベースラインからのドリフトを検知、さらにエージェントの
+トレース（ツール呼び出し順・コスト予算・無限ループ）をポリシーで検査します。
+オフラインファースト設計で、テストもサンプルも **APIキーなし** で動きます。
+
+---
+
+## Why / なぜ必要か
+
+**EN**
+
+- **Prompt changes are silent regressions.** A one-line prompt tweak can break
+  JSON output, leak text it shouldn't, or double your token bill — and nothing
+  in a normal CI pipeline notices. `llm-canary run` turns those into failing
+  builds.
+- **You rarely have golden answers.** LLM output isn't byte-stable, so snapshot
+  tests don't work. `record`/`check` compares against a baseline with semantic
+  similarity and cost-drift thresholds instead of exact matches.
+- **Agents act; outputs aren't enough.** In 2026 the risk moved from "what did
+  the model say" to "what did the agent do". `trace` gates a JSONL action log
+  against a policy: forbidden tools, required ordering, step/cost budgets,
+  loop detection.
+
+**JA**
+
+- **プロンプト変更は静かなデグレ。** 1行の修正で JSON 出力が壊れたり、出すべき
+  でない文言が混ざったり、トークン費用が倍になっても、普通の CI は気づきません。
+  `llm-canary run` がそれをビルド失敗に変えます。
+- **正解データは普通ない。** LLM の出力はバイト単位では安定しないため、スナップ
+  ショットテストは機能しません。`record`/`check` は完全一致ではなく、意味的
+  類似度とコストドリフトの閾値でベースラインと比較します。
+- **エージェントは「行動」する。** 2026年のリスクは「何を言ったか」から「何を
+  したか」へ移りました。`trace` は JSONL の行動ログをポリシー（禁止ツール・
+  実行順序・ステップ/コスト予算・ループ検知）で検査します。
+
+---
+
+## Quickstart / クイックスタート
+
+```bash
+# install (Python 3.11+)
+uv tool install llm-canary    # or: pip install llm-canary
+# from source: git clone && uv sync && uv run llm-canary ...
+
+# scaffold and run a starter suite — works offline, no keys
+llm-canary init
+llm-canary run canary.yaml
+
+# the bundled, fully offline example suite
+llm-canary run canary.example.yaml
+
+# check an agent trace against a policy
+llm-canary trace examples/agent-trace/trace.jsonl \
+  --policy examples/agent-trace/policy.yaml
+```
+
+Exit code is `0` when everything passes, `1` on failures — drop it straight
+into CI. / 全て成功で終了コード `0`、失敗で `1`。そのまま CI に組み込めます。
+
+---
+
+## Suite YAML / スイート定義
+
+```yaml
+name: support-bot
+providers:
+  - name: openai            # echo / fixture / openai / anthropic
+    model: gpt-4o-mini
+judge:                      # optional: provider used by `judge` assertions
+  name: anthropic
+  model: claude-haiku-4-5
+cases:
+  - name: refund-policy
+    prompt: "A customer asks: can I get a refund for {product}?"
+    vars:
+      product: "a keyboard bought 2 weeks ago"
+    assertions:
+      - type: contains
+        value: "30 days"
+      - type: json_schema
+        value: {type: object, required: [eligible]}
+      - type: judge
+        value: "Politely explains the refund policy"
+        threshold: 0.7
+      - type: max_cost_usd
+        value: 0.01
+```
+
+### Assertions / アサーション一覧
+
+| type | checks / 内容 |
+|---|---|
+| `contains` / `not_contains` | substring (opt. `case_insensitive`) / 部分文字列 |
+| `regex` | pattern match / 正規表現 |
+| `equals` | exact match, whitespace-trimmed / 完全一致 |
+| `json_valid` | parseable JSON (handles ``` fences & prose) / JSON妥当性 |
+| `json_schema` | JSON Schema validation / スキーマ検証 |
+| `similarity` | semantic similarity vs reference (`threshold`) / 意味的類似度 |
+| `judge` | LLM-as-judge score vs criteria (`threshold`) / LLM評価 |
+| `max_latency_ms` / `max_cost_usd` / `max_output_tokens` | budget gates / 予算ゲート |
+
+### Providers / プロバイダ
+
+- `echo` — returns the prompt; deterministic, free, offline. / プロンプトを
+  そのまま返すオフライン用
+- `fixture` — regex-routed canned replies; ideal for offline demos and as an
+  offline judge. / 正規表現で固定応答を返す。オフラインのジャッジにも使える
+- `openai` / `anthropic` — real APIs via `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+- Cost is estimated from a built-in price table — good enough for budget
+  gates. / コストは内蔵価格表からの概算
+
+---
+
+## Baseline drift / ベースラインドリフト
+
+```bash
+llm-canary record canary.yaml          # snapshot outputs + costs
+llm-canary check canary.yaml           # rerun and gate on drift
+llm-canary check canary.yaml --similarity-threshold 0.85 --cost-drift 0.1
+```
+
+`check` fails when an output's semantic similarity to the baseline drops below
+the threshold, or cost grows beyond the allowed ratio. The default embedder is
+a deterministic offline hash embedder (pluggable). /
+`check` は出力の類似度が閾値を下回るか、コストが許容比率を超えて増えたときに
+失敗します。既定の埋め込みは決定的なオフラインのハッシュ埋め込み（差し替え可）。
+
+---
+
+## Agent trace gates / エージェントトレース検査
+
+```jsonl
+{"type": "tool_call", "tool": "query_sales_db", "cost_usd": 0.002}
+{"type": "tool_call", "tool": "post_slack", "cost_usd": 0.001}
+```
+
+```yaml
+# policy.yaml
+max_steps: 10
+max_cost_usd: 0.05
+forbidden_tools: [delete_records, send_email]
+required_order: [query_sales_db, post_slack]
+max_tool_repeats: 3        # catch runaway loops
+```
+
+```bash
+llm-canary trace trace.jsonl --policy policy.yaml
+```
+
+Emit one JSON object per agent step from your framework of choice and gate it
+in CI. / 任意のフレームワークからステップごとに JSON を1行出力し、CI で
+ゲートします。
+
+---
+
+## GitHub Actions
+
+```yaml
+- name: LLM regression gate
+  run: |
+    uv run llm-canary run canary.yaml --junit junit.xml --md summary.md
+    uv run llm-canary trace trace.jsonl --policy policy.yaml
+```
+
+`--junit` integrates with test reporters; `--md` is ready to post as a PR
+comment. / `--junit` はテストレポーター連携用、`--md` は PR コメント投稿用。
+
+---
+
+## Architecture / アーキテクチャ
+
+```
+suite YAML ─▶ runner ─▶ provider (echo | fixture | openai | anthropic)
+                │              │
+                ▼              ▼
+           assertions ◀── completion {text, tokens, cost, latency}
+                │
+                ├─▶ reports: console / JUnit XML / Markdown
+                └─▶ baseline: record / drift check (hash embedder)
+
+trace JSONL ─▶ policy checks ─▶ violations (exit 1)
+```
+
+- `src/llm_canary/config.py` — pydantic specs for suites & policies
+- `src/llm_canary/providers/` — provider registry (offline + remote)
+- `src/llm_canary/assertions/` — assertion registry (basic + quality)
+- `src/llm_canary/baseline.py` — snapshot & drift detection
+- `src/llm_canary/trace.py` — agent-trace policy engine
+- `src/llm_canary/report.py` — console / JUnit / Markdown reporters
+
+## Development / 開発
+
+```bash
+uv sync
+uv run pytest          # entire suite is offline — no keys, no network
+uv run ruff check .
+```
+
+## License
+
+MIT

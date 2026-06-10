@@ -103,7 +103,10 @@ def cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    uvicorn.run(create_app(args.db), host=args.host, port=args.port)
+    import os
+
+    allow_command = args.allow_command or os.environ.get("CANARY_ALLOW_COMMAND") == "1"
+    uvicorn.run(create_app(args.db, allow_command=allow_command), host=args.host, port=args.port)
     return 0
 
 
@@ -153,6 +156,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8080)
     p_serve.add_argument("--db", default=".canary/canary.db", help="SQLite file for history")
+    p_serve.add_argument(
+        "--allow-command",
+        action="store_true",
+        help="allow suites that use the `command` provider (runs processes on this host)",
+    )
     p_serve.set_defaults(func=cmd_serve)
 
     p_init = sub.add_parser("init", help="write a starter suite")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from llm_canary.config import ProviderSpec
 from llm_canary.providers.base import Completion, Provider
+from llm_canary.providers.integration import CommandProvider, HttpProvider
 from llm_canary.providers.offline import EchoProvider, FixtureProvider
 from llm_canary.providers.remote import AnthropicProvider, OpenAIProvider
 
@@ -12,6 +13,8 @@ REGISTRY: dict[str, type[Provider]] = {
     "fixture": FixtureProvider,
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
+    "command": CommandProvider,
+    "http": HttpProvider,
 }
 
 

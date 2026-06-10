@@ -26,17 +26,21 @@ class Drift:
     message: str
 
 
-def save_baseline(result: SuiteResult, path: str | Path = DEFAULT_BASELINE) -> None:
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    data = {
+def baseline_data(result: SuiteResult) -> dict:
+    cases = {
         r.key: {
             "text": r.completion.text if r.completion else "",
             "cost_usd": r.completion.cost_usd if r.completion else 0.0,
         }
         for r in result.results
     }
-    path.write_text(json.dumps({"suite": result.suite, "cases": data}, indent=2))
+    return {"suite": result.suite, "cases": cases}
+
+
+def save_baseline(result: SuiteResult, path: str | Path = DEFAULT_BASELINE) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(baseline_data(result), indent=2))
 
 
 def load_baseline(path: str | Path = DEFAULT_BASELINE) -> dict:

@@ -1,0 +1,14 @@
+services:
+  llm-canary:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - canary-data:/data
+    environment:
+      # only needed if your suites use remote providers
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+
+volumes:
+  canary-data:

@@ -121,8 +121,61 @@ cases:
 - `fixture` — regex-routed canned replies; ideal for offline demos and as an
   offline judge. / 正規表現で固定応答を返す。オフラインのジャッジにも使える
 - `openai` / `anthropic` — real APIs via `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`
+  (`base_url` option points `openai` at any OpenAI-compatible endpoint)
+- `command` / `http` — **your actual bot**, whatever it is (see below) /
+  **あなたの本物のボット**を対象にする(下記)
 - Cost is estimated from a built-in price table — good enough for budget
   gates. / コストは内蔵価格表からの概算
+
+---
+
+## Test YOUR bot, not the raw model / 素のモデルではなく「あなたのボット」を検査する
+
+A canary is only meaningful if the thing you change — your system prompt,
+your RAG pipeline, your pre/post-processing — is on the execution path. The
+`command` and `http` providers put your real application under test, however
+it is built. / カナリアが意味を持つのは、あなたが変更するもの（システム
+プロンプト・RAG・前後処理）が実行経路に乗っているときだけです。`command` /
+`http` プロバイダは、どんな作りのアプリでも「本物」をテスト対象にします。
+
+**`command` — anything executable / 実行できるものなら何でも**(Python, Node,
+Go, shell, …). The prompt replaces `{prompt}` in the arguments — or is piped
+to stdin when there is no placeholder — and stdout is the reply:
+
+```yaml
+providers:
+  - name: command
+    options:
+      cmd: "python my_bot.py --ask {prompt}"   # or just "python my_bot.py" (stdin)
+```
+
+**`http` — anything with an HTTP API / HTTP APIを持つものなら何でも**.
+`{prompt}` is substituted into the body/params/url; the reply is extracted
+from the response JSON with a dot path:
+
+```yaml
+providers:
+  - name: http
+    options:
+      url: http://localhost:8000/chat
+      body: {message: "{prompt}", session: "ci"}
+      response_path: reply.text          # or e.g. choices.0.message.content
+      headers: {Authorization: "Bearer ${BOT_TOKEN}"}
+```
+
+In CI, boot your bot and point the canary at it / CIではボットを起動して
+カナリアを向けるだけ:
+
+```yaml
+- run: docker compose up -d my-chatbot
+- run: llm-canary run suite.yaml        # http provider hits the real stack
+```
+
+> **Security / セキュリティ**: the `command` provider executes processes, so
+> the self-hosted server rejects it unless started with
+> `llm-canary serve --allow-command` (or `CANARY_ALLOW_COMMAND=1`). /
+> `command` はプロセスを実行するため、セルフホストサーバーでは既定で拒否され、
+> `--allow-command` での明示的な許可が必要です。
 
 ---
 

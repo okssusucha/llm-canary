@@ -59,9 +59,24 @@ class BaselineCheckRequest(BaseModel):
     cost_drift_ratio: float = 0.2
 
 
-def create_app(db_path: str = ".canary/canary.db") -> FastAPI:
+def create_app(db_path: str = ".canary/canary.db", allow_command: bool = False) -> FastAPI:
     store = Store(db_path)
     app = FastAPI(title="llm-canary", version=__version__)
+
+    def ensure_allowed(suite: SuiteSpec) -> None:
+        # `command` providers execute arbitrary processes on this host; over a
+        # network API that is remote code execution, so it is opt-in only.
+        if allow_command:
+            return
+        names = [p.name for p in suite.providers]
+        if suite.judge is not None:
+            names.append(suite.judge.name)
+        if "command" in names:
+            raise HTTPException(
+                400,
+                "the `command` provider is disabled on this server"
+                " — start it with `llm-canary serve --allow-command` to enable",
+            )
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -70,6 +85,7 @@ def create_app(db_path: str = ".canary/canary.db") -> FastAPI:
     @app.post("/api/runs")
     def create_run(suite_spec: dict[str, Any]) -> dict[str, Any]:
         suite = SuiteSpec.model_validate(suite_spec)
+        ensure_allowed(suite)
         payload = result_dict(run_suite(suite))
         summary = f"{payload['ok']} passed, {payload['failed']} failed"
         run_id = store.add_run("suite", suite.name, payload["passed"], summary, payload)
@@ -100,6 +116,7 @@ def create_app(db_path: str = ".canary/canary.db") -> FastAPI:
     @app.put("/api/baselines/{name}")
     def record_baseline(name: str, suite_spec: dict[str, Any]) -> dict[str, Any]:
         suite = SuiteSpec.model_validate(suite_spec)
+        ensure_allowed(suite)
         data = baseline_data(run_suite(suite))
         store.set_baseline(name, data)
         return {"name": name, "cases": len(data["cases"])}
@@ -110,6 +127,7 @@ def create_app(db_path: str = ".canary/canary.db") -> FastAPI:
         if baseline is None:
             raise HTTPException(404, f"baseline {name!r} not found — PUT it first")
         suite = SuiteSpec.model_validate(req.suite)
+        ensure_allowed(suite)
         drifts = check_drift(
             run_suite(suite),
             baseline,

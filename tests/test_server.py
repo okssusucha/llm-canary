@@ -93,6 +93,34 @@ def test_baseline_check_missing_is_404(client):
     assert client.post("/api/baselines/nope/check", json={"suite": SUITE}).status_code == 404
 
 
+def test_command_provider_rejected_by_default(client):
+    suite = {
+        "name": "rce",
+        "providers": [{"name": "command", "options": {"cmd": "echo hi"}}],
+        "cases": [{"name": "c", "prompt": "x"}],
+    }
+    resp = client.post("/api/runs", json=suite)
+    assert resp.status_code == 400
+    assert "--allow-command" in resp.json()["detail"]
+
+
+def test_command_provider_allowed_with_flag(tmp_path):
+    client = TestClient(create_app(str(tmp_path / "c.db"), allow_command=True))
+    suite = {
+        "name": "cmd",
+        "providers": [{"name": "command", "options": {"cmd": "echo reply: {prompt}"}}],
+        "cases": [
+            {
+                "name": "c",
+                "prompt": "ping",
+                "assertions": [{"type": "contains", "value": "reply: ping"}],
+            }
+        ],
+    }
+    body = client.post("/api/runs", json=suite).json()
+    assert body["passed"] is True
+
+
 def test_dashboard_lists_runs(client):
     client.post("/api/runs", json=SUITE)
     html = client.get("/").text

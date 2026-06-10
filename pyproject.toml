@@ -1,6 +1,6 @@
 [project]
 name = "llm-canary"
-version = "0.1.0"
+version = "0.2.0"
 description = "Regression canary for LLM apps: YAML test suites, offline-first assertions, baseline diffing, and agent-trace policy gates for CI"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,11 +13,19 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
+
 [dependency-groups]
 dev = [
+    "fastapi>=0.110",
     "pytest>=8.0",
     "respx>=0.21",
     "ruff>=0.5",
+    "uvicorn[standard]>=0.29",
 ]
 
 [project.scripts]

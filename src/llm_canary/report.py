@@ -13,6 +13,33 @@ PASS = "PASS"
 FAIL = "FAIL"
 
 
+def result_dict(result: SuiteResult) -> dict:
+    """JSON-safe view of a suite result (used by the server API)."""
+    ok, failed = result.counts
+    return {
+        "suite": result.suite,
+        "passed": result.passed,
+        "ok": ok,
+        "failed": failed,
+        "results": [
+            {
+                "provider": r.provider,
+                "case": r.case,
+                "passed": r.passed,
+                "error": r.error,
+                "output": r.completion.text if r.completion else None,
+                "cost_usd": r.completion.cost_usd if r.completion else None,
+                "latency_ms": r.completion.latency_ms if r.completion else None,
+                "assertions": [
+                    {"type": a.type, "passed": a.passed, "message": a.message}
+                    for a in r.assertions
+                ],
+            }
+            for r in result.results
+        ],
+    }
+
+
 def console_report(result: SuiteResult, verbose: bool = False) -> str:
     lines = [f"suite: {result.suite}"]
     for r in result.results:

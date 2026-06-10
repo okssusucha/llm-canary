@@ -92,6 +92,21 @@ def cmd_trace(args: argparse.Namespace) -> int:
     return 0 if not violations else 1
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    try:
+        import uvicorn
+
+        from llm_canary.server import create_app
+    except ImportError:
+        print(
+            "server dependencies missing — install with: pip install 'llm-canary[server]'",
+            file=sys.stderr,
+        )
+        return 2
+    uvicorn.run(create_app(args.db), host=args.host, port=args.port)
+    return 0
+
+
 def cmd_init(args: argparse.Namespace) -> int:
     target = Path(args.path)
     if target.exists():
@@ -133,6 +148,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_trace.add_argument("trace", help="path to trace JSONL")
     p_trace.add_argument("--policy", required=True, help="path to policy YAML")
     p_trace.set_defaults(func=cmd_trace)
+
+    p_serve = sub.add_parser("serve", help="run the self-hosted server (history + dashboard)")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8080)
+    p_serve.add_argument("--db", default=".canary/canary.db", help="SQLite file for history")
+    p_serve.set_defaults(func=cmd_serve)
 
     p_init = sub.add_parser("init", help="write a starter suite")
     p_init.add_argument("path", nargs="?", default="canary.yaml")

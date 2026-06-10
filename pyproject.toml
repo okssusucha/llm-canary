@@ -1,11 +1,21 @@
 [project]
 name = "llm-canary"
-version = "0.3.0"
+version = "0.4.0"
 description = "Regression canary for LLM apps: YAML test suites, offline-first assertions, baseline diffing, and agent-trace policy gates for CI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "okssusucha" }]
+keywords = ["llm", "testing", "evaluation", "regression", "ci", "agents", "prompt"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
 dependencies = [
     "httpx>=0.27",
     "jsonschema>=4.21",
@@ -27,6 +37,11 @@ dev = [
     "ruff>=0.5",
     "uvicorn[standard]>=0.29",
 ]
+
+[project.urls]
+Repository = "https://github.com/okssusucha/llm-canary"
+Changelog = "https://github.com/okssusucha/llm-canary/blob/main/CHANGELOG.md"
+Issues = "https://github.com/okssusucha/llm-canary/issues"
 
 [project.scripts]
 llm-canary = "llm_canary.cli:main"

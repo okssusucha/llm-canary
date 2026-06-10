@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from llm_canary.assertions import AssertionResult, run_assertion
@@ -60,10 +62,36 @@ def run_case(provider_spec: ProviderSpec, case: CaseSpec, ctx: RunContext) -> Ca
     return CaseResult(provider_spec.key, case.name, completion, assertions)
 
 
-def run_suite(suite: SuiteSpec) -> SuiteResult:
+def expand_cases(cases: list[CaseSpec]) -> list[CaseSpec]:
+    """Expand `matrix:` axes into concrete cases (cartesian product)."""
+    expanded: list[CaseSpec] = []
+    for case in cases:
+        if not case.matrix:
+            expanded.append(case)
+            continue
+        keys = list(case.matrix)
+        for combo in itertools.product(*case.matrix.values()):
+            label = ",".join(str(v) for v in combo)
+            expanded.append(
+                case.model_copy(
+                    update={
+                        "name": f"{case.name}[{label}]",
+                        "vars": case.vars | dict(zip(keys, combo, strict=True)),
+                        "matrix": {},
+                    }
+                )
+            )
+    return expanded
+
+
+def run_suite(suite: SuiteSpec, max_workers: int = 1) -> SuiteResult:
     ctx = build_context(suite)
+    cases = expand_cases(suite.cases)
+    jobs = [(p, c) for p in suite.providers for c in cases]
     result = SuiteResult(suite.name)
-    for provider_spec in suite.providers:
-        for case in suite.cases:
-            result.results.append(run_case(provider_spec, case, ctx))
+    if max_workers <= 1:
+        result.results = [run_case(p, c, ctx) for p, c in jobs]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            result.results = list(pool.map(lambda job: run_case(*job, ctx), jobs))
     return result

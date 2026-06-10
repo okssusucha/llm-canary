@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from llm_canary import __version__
@@ -59,9 +59,22 @@ class BaselineCheckRequest(BaseModel):
     cost_drift_ratio: float = 0.2
 
 
-def create_app(db_path: str = ".canary/canary.db", allow_command: bool = False) -> FastAPI:
+def create_app(
+    db_path: str = ".canary/canary.db",
+    allow_command: bool = False,
+    token: str | None = None,
+) -> FastAPI:
     store = Store(db_path)
     app = FastAPI(title="llm-canary", version=__version__)
+
+    if token:
+
+        @app.middleware("http")
+        async def require_token(request: Request, call_next):
+            if request.url.path != "/healthz":
+                if request.headers.get("authorization") != f"Bearer {token}":
+                    return JSONResponse({"detail": "unauthorized"}, status_code=401)
+            return await call_next(request)
 
     def ensure_allowed(suite: SuiteSpec) -> None:
         # `command` providers execute arbitrary processes on this host; over a

@@ -44,20 +44,24 @@ def check_equals(spec: AssertionSpec, c: Completion, ctx: RunContext) -> Result:
     return ok, "" if ok else f"output != expected (got {c.text[:120]!r})"
 
 
-def _extract_json(text: str) -> str:
-    """Allow JSON wrapped in prose or ``` fences — models love both."""
+def _parse_json(text: str):
+    """Parse JSON wrapped in prose or ``` fences — models love both."""
     fenced = re.search(r"```(?:json)?\s*(.+?)```", text, re.DOTALL)
     if fenced:
-        return fenced.group(1).strip()
+        return json.loads(fenced.group(1).strip())
     start = re.search(r"[{\[]", text)
-    if start:
-        return text[start.start() :].strip()
-    return text.strip()
+    candidate = (text[start.start() :] if start else text).strip()
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError:
+        # tolerate trailing prose after the JSON ("... } Hope that helps!")
+        obj, _ = json.JSONDecoder().raw_decode(candidate)
+        return obj
 
 
 def check_json_valid(spec: AssertionSpec, c: Completion, ctx: RunContext) -> Result:
     try:
-        json.loads(_extract_json(c.text))
+        _parse_json(c.text)
         return True, ""
     except json.JSONDecodeError as exc:
         return False, f"output is not valid JSON: {exc}"
@@ -65,7 +69,7 @@ def check_json_valid(spec: AssertionSpec, c: Completion, ctx: RunContext) -> Res
 
 def check_json_schema(spec: AssertionSpec, c: Completion, ctx: RunContext) -> Result:
     try:
-        data = json.loads(_extract_json(c.text))
+        data = _parse_json(c.text)
     except json.JSONDecodeError as exc:
         return False, f"output is not valid JSON: {exc}"
     try:

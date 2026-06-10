@@ -30,10 +30,16 @@ class CaseSpec(BaseModel):
     name: str
     prompt: str
     vars: dict[str, Any] = Field(default_factory=dict)
+    matrix: dict[str, list[Any]] = Field(default_factory=dict)
     assertions: list[AssertionSpec] = Field(default_factory=list)
 
     def rendered_prompt(self) -> str:
-        return self.prompt.format(**self.vars) if self.vars else self.prompt
+        # plain replace, not str.format — real prompts contain literal braces
+        # (JSON examples, code snippets) that must survive untouched
+        text = self.prompt
+        for key, value in self.vars.items():
+            text = text.replace("{" + key + "}", str(value))
+        return text
 
 
 class ProviderSpec(BaseModel):

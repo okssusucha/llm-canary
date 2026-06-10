@@ -11,6 +11,14 @@ from llm_canary.trace import Violation
 
 PASS = "PASS"
 FAIL = "FAIL"
+_GREEN, _RED, _RESET = "\033[32m", "\033[31m", "\033[0m"
+
+
+def _mark(passed: bool, color: bool) -> str:
+    label = PASS if passed else FAIL
+    if not color:
+        return label
+    return f"{_GREEN}{label}{_RESET}" if passed else f"{_RED}{label}{_RESET}"
 
 
 def result_dict(result: SuiteResult) -> dict:
@@ -40,11 +48,10 @@ def result_dict(result: SuiteResult) -> dict:
     }
 
 
-def console_report(result: SuiteResult, verbose: bool = False) -> str:
+def console_report(result: SuiteResult, verbose: bool = False, color: bool = False) -> str:
     lines = [f"suite: {result.suite}"]
     for r in result.results:
-        mark = PASS if r.passed else FAIL
-        lines.append(f"  [{mark}] {r.key}")
+        lines.append(f"  [{_mark(r.passed, color)}] {r.key}")
         if r.error:
             lines.append(f"         provider error: {r.error}")
         for a in r.assertions:
